@@ -71,7 +71,7 @@ frame_transforms = transforms.Compose([
     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize to [-1, 1]
 ])
 
-train_dataset = TalkingFaceFrameDataset(train_frames, frame_transforms=frame_transforms)
+train_dataset = TalkingFaceFrameDataset(train_frames[:5], frame_transforms=frame_transforms)
 val_dataset = TalkingFaceFrameDataset(val_frames, frame_transforms=frame_transforms)
 test_dataset = TalkingFaceFrameDataset(test_frames, frame_transforms=frame_transforms)
 
@@ -106,16 +106,16 @@ import torch.optim as optim
 from tqdm import tqdm
 
 # Assuming 'diffusion' is your model instance
-if torch.cuda.device_count() > 1:
-    print(f"Let's use {torch.cuda.device_count()} GPUs!")
-    # This wrapper will enable your model to run on multiple GPUs
-    diffusion = nn.DataParallel(diffusion)
+# if torch.cuda.device_count() > 1:
+#     print(f"Let's use {torch.cuda.device_count()} GPUs!")
+#     # This wrapper will enable your model to run on multiple GPUs
+#     diffusion = nn.DataParallel(diffusion)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 diffusion.to(device)
 
 # Optimizer setup
-train_dataloader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True)
 optimizer = optim.Adam(diffusion.parameters(), lr=0.001)
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.95)
 
@@ -152,5 +152,115 @@ for epoch in range(n_epochs):
     avg_epoch_loss = epoch_loss / len(train_dataloader)
     print(f"Epoch {epoch + 1}/{n_epochs} completed, Average Loss: {avg_epoch_loss}")
 
+# import torch
+# import torch.nn as nn
+# from torch.utils.data import DataLoader, DistributedSampler
+# import torch.optim as optim
+# import torch.distributed as dist
+# import torch.multiprocessing as mp
+# from torchvision.transforms import transforms
+# from tqdm import tqdm
+# import numpy as np
+# import random
+# import pickle
+
+# import os
+
+# from dataset import *
+# from diffusion import Diffusion
+# from unet import UNet
+
+# def setup(rank, world_size):
+#     os.environ['MASTER_ADDR'] = 'localhost'
+#     os.environ['MASTER_PORT'] = '12355'
+#     dist.init_process_group("nccl", rank=rank, world_size=world_size)
+#     torch.cuda.set_device(rank)
+
+# def cleanup():
+#     dist.destroy_process_group()
+
+# def train(rank, world_size, epochs):
+#     setup(rank, world_size)
+
+#     device = torch.device(f"cuda:{rank}")
+
+#     # Model setup
+#     image_size = 128
+#     in_channels = 3
+#     model_channels = 64
+#     out_channels = 3
+#     num_res_blocks = 1
+#     attention_resolutions = (8, 4, 2)
+#     dropout = 0.1
+#     channel_mult = (1, 2, 3)
+#     num_heads = 4
+#     num_head_channels = -1
+#     resblock_updown = True
+
+#     unet = UNet(image_size, in_channels, model_channels, out_channels, num_res_blocks,
+#                 attention_resolutions, dropout=dropout, channel_mult=channel_mult,
+#                 num_heads=num_heads, num_head_channels=num_head_channels,
+#                 resblock_updown=resblock_updown, id_condition_type='frame', precision=32).to(device)
+#     diffusion = Diffusion(unet, 10, in_channels, image_size, out_channels, 32)
+#     diffusion = nn.parallel.DistributedDataParallel(diffusion, device_ids=[rank])
+
+#     # Data loading
+#     video_dataset_frame_items = pickle.load(open("preprocessing/video_dataset_list.pkl", "rb"))
+#     video_dataset_frame_items = np.array(video_dataset_frame_items)
+#     random.shuffle(video_dataset_frame_items)
+
+#     # Split dataset
+#     split_train = int(0.8 * len(video_dataset_frame_items))
+#     split_val = int(0.9 * len(video_dataset_frame_items))
+
+#     train_data = video_dataset_frame_items[:split_train]
+#     val_data = video_dataset_frame_items[split_train:split_val]
+
+#     # Transform setup
+#     frame_transforms = transforms.Compose([
+#         transforms.ToPILImage(),
+#         transforms.Resize((128, 128)),
+#         transforms.ToTensor(),
+#         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+#     ])
+
+#     train_dataset = TalkingFaceFrameDataset(train_data, frame_transforms=frame_transforms)
+#     val_dataset = TalkingFaceFrameDataset(val_data, frame_transforms=frame_transforms)
+
+#     train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True)
+#     train_loader = DataLoader(train_dataset, batch_size=2, sampler=train_sampler)
+
+#     # Optimizer and scheduler setup
+#     optimizer = optim.Adam(diffusion.parameters(), lr=0.001)
+#     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.95)
+
+#     # Training loop
+#     for epoch in range(epochs):
+#         train_sampler.set_epoch(epoch)
+#         total_loss = 0
+
+#         for batch_idx, (x, x_cond) in enumerate(tqdm(train_loader, desc=f"Rank {rank} Epoch {epoch+1}")):
+#             x = x.to(device)
+#             x_cond = x_cond.to(device)
+
+#             optimizer.zero_grad()
+#             losses = diffusion(x, x_cond)
+#             loss = losses['simple']
+#             loss.backward()
+#             optimizer.step()
+
+#             total_loss += loss.item()
+
+#         if rank == 0:
+#             print(f"Epoch {epoch + 1}: Avg Loss = {total_loss / len(train_loader)}")
+
+#         scheduler.step()
+
+#     cleanup()
+
+# if __name__ == "__main__":
+#     world_size = torch.cuda.device_count()
+#     epochs = 10
+#     mp.spawn(train, args=(world_size, epochs), nprocs=world_size, join=True)
 
 
