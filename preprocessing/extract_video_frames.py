@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 import sys
 
-DATA_DIR = "/proj/vondrick/aa4870/lipreading-data/mvlrs_v1"
+DATA_DIR = "/home/whd2108/mvlrs_v1"
 
 def get_mp4_files(directory):
     # Use a glob pattern to match all .mp4 files

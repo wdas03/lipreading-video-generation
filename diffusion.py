@@ -52,7 +52,11 @@ class Diffusion(nn.Module):
 
     def sample(self, x_cond, bsz, audio_emb=None, device='cuda', mode=None, stabilize=False, segment_len=None):
         with torch.no_grad():
-            n_frames = audio_emb.shape[1]
+            if audio_emb:
+                n_frames = audio_emb.shape[1]
+            else:
+                n_frames = 10
+                
             xT = torch.randn(x_cond.shape[0], n_frames, self.in_channels, *self.x_shape, device=self.device)
 
             audio_ids = [0] * self.nn_backbone.n_audio_motion_embs
@@ -108,6 +112,8 @@ class Diffusion(nn.Module):
 if __name__ == '__main__':
     print(torch.cuda.is_available())
 
+    device = 'cuda'
+
     from unet import UNet
 
     image_size = 32
@@ -122,10 +128,11 @@ if __name__ == '__main__':
     num_head_channels = -1
     resblock_updown = True
     
-    unet = UNet(image_size, in_channels, model_channels, out_channels, num_res_blocks, attention_resolutions, dropout=dropout, channel_mult=channel_mult, num_heads=num_heads, num_head_channels=num_head_channels, resblock_updown=resblock_updown, id_condition_type='frame', precision=32).to('cpu')
+    unet = UNet(image_size, in_channels, model_channels, out_channels, num_res_blocks, attention_resolutions, dropout=dropout, channel_mult=channel_mult, num_heads=num_heads, num_head_channels=num_head_channels, resblock_updown=resblock_updown, id_condition_type='frame', precision=32).to(device)
     
     diffusion = Diffusion(unet, 10, in_channels, image_size, out_channels, 32)
     print(diffusion.device)
 
     x = torch.randn(25, 3, image_size, image_size, device=diffusion.device)
-    print(diffusion(x, x)['simple'].shape)  # Display the shape of one of the losses for example
+    print(diffusion(x, x))
+    print(diffusion.sample(x, 25))

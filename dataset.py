@@ -6,17 +6,72 @@ from torchvision.transforms import Resize, ToTensor, Compose, Normalize
 from transformers import Wav2Vec2Processor, Wav2Vec2Model, Wav2Vec2ForCTC
 
 import cv2
+from decord import VideoReader, cpu
 from moviepy.editor import VideoFileClip
 
 import numpy as np
 
 from sklearn.model_selection import train_test_split
 
-DATA_DIR = "/proj/vondrick/aa4870/lipreading-data/mvlrs_v1"
-CACHE_DIR = "/proj/vondrick/aa4870/hf-model-checkpoints"
+DATA_DIR = "/home/whd2108/mvlrs_v1"
+CACHE_DIR = "/home/whd2108/hf-model-checkpoints"
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'cpu'
+
+class FrameItem:
+    def __init__(self, video_path, frame_start, frame_end):
+        self.video_path = video_path
+        self.frame_start = frame_start
+        self.frame_end = frame_end
+
+class TalkingFaceFrameDataset(Dataset):
+    def __init__(self, frame_items, frame_transforms=None, frame_rate=30):
+        self.frame_items = frame_items
+        self.frame_transforms = frame_transforms
+        self.frame_rate = frame_rate
+
+    def __len__(self):
+        return len(self.frame_items)
+
+    def __getitem__(self, idx):
+        frame_item = self.frame_items[idx]
+        video_path = frame_item.video_path
+        frame_start = frame_item.frame_start
+        frame_end = frame_item.frame_end
+
+        try:
+            # Initialize the VideoReader with the CPU context
+            vr = VideoReader(video_path, ctx=cpu(0))  # Use CPU context for reading videos
+            video_fps = vr.get_avg_fps()
+            total_frames = len(vr)
+
+            if video_fps == 0:
+                raise ValueError("FPS is zero, which may indicate an issue with the video file or codec.")
+
+            # Calculate the step size to simulate an effective FPS of 30 if needed
+            step = max(1, int(video_fps / self.frame_rate))
+
+            # Get the input and output frame indices based on the frame_start and frame_end
+            input_frame_idx = max(0, frame_start)
+            output_frame_idx = min(frame_end, total_frames - 1)
+
+            # Read the input and output frames from the video
+            vr.seek(input_frame_idx)
+            input_frame = vr.next().asnumpy()
+
+            vr.seek(output_frame_idx)
+            output_frame = vr.next().asnumpy()
+
+            # Apply frame transforms if provided
+            if self.frame_transforms is not None:
+                input_frame = self.frame_transforms(input_frame)
+                output_frame = self.frame_transforms(output_frame)
+
+            return input_frame, output_frame
+        except Exception as e:
+            print(f"Error processing video {video_path}: {e}")
+            return None, None
 
 class TalkingFaceDataset(Dataset):
     def __init__(self, video_files, transform=None, frame_rate=30, audio_model="facebook/wav2vec2-base"):
