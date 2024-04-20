@@ -1,0 +1,4 @@
+Real-Time-Voice-Cloning/
+*.pkl
+.DS_STORE
+__pycache__
