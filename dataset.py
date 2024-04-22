@@ -1,13 +1,20 @@
 import torch
+
 import torchaudio
+from torchaudio.transforms import Resample, Vad
+
 from torch.utils.data import Dataset, DataLoader
+
 from torchvision.io import read_video
 from torchvision.transforms import Resize, ToTensor, Compose, Normalize
+
 from transformers import Wav2Vec2Processor, Wav2Vec2Model, Wav2Vec2ForCTC
 
 import cv2
 from decord import VideoReader, cpu
 from moviepy.editor import VideoFileClip
+
+import torchaudio
 
 import numpy as np
 
@@ -19,6 +26,19 @@ CACHE_DIR = "/home/whd2108/hf-model-checkpoints"
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'cpu'
 
+def high_pass_filter(waveform, sr, cutoff_freq=300):
+    waveform = torchaudio.functional.highpass_biquad(waveform, sr, cutoff_freq)
+    return waveform
+
+def normalize_waveform(waveform):
+    mean = waveform.mean()
+    std = waveform.std()
+    return (waveform - mean) / std
+
+def voice_activity_detection(waveform, sr):
+    vad = Vad(sample_rate=sr)
+    return vad(waveform)
+
 class FrameItem:
     def __init__(self, video_path, frame_start, frame_end):
         self.video_path = video_path
@@ -26,10 +46,11 @@ class FrameItem:
         self.frame_end = frame_end
 
 class TalkingFaceFrameDataset(Dataset):
-    def __init__(self, frame_items, frame_transforms=None, frame_rate=30):
+    def __init__(self, frame_items, frame_transforms=None, frame_rate=30, audio_transforms=None):
         self.frame_items = frame_items
         self.frame_transforms = frame_transforms
         self.frame_rate = frame_rate
+        self.audio_transforms = audio_transforms
 
     def __len__(self):
         return len(self.frame_items)
@@ -53,7 +74,8 @@ class TalkingFaceFrameDataset(Dataset):
             step = max(1, int(video_fps / self.frame_rate))
 
             # Get the input and output frame indices based on the frame_start and frame_end
-            input_frame_idx = max(0, frame_start)
+            # input_frame_idx = max(0, frame_start)
+            input_frame_idx = 0
             output_frame_idx = min(frame_end, total_frames - 1)
 
             # Read the input and output frames from the video
@@ -67,8 +89,26 @@ class TalkingFaceFrameDataset(Dataset):
             if self.frame_transforms is not None:
                 input_frame = self.frame_transforms(input_frame)
                 output_frame = self.frame_transforms(output_frame)
+            
+            buffer_frames = 5
 
-            return input_frame, output_frame
+            # Calculate exact second intervals for audio corresponding to these frames
+            frame_duration = 1 / video_fps
+            start_sec = max(0, (output_frame_idx - buffer_frames) * frame_duration)
+            end_sec = output_frame_idx * frame_duration
+
+            waveform, sr = torchaudio.load(video_path)
+            start_sample = int(sr * start_sec)
+            end_sample = int(sr * end_sec)
+
+            audio_segment = waveform[:, start_sample:end_sample]
+            audio_segment = normalize_waveform(high_pass_filter(audio_segment, sr))
+
+            # Apply audio transforms if provided (e.g., resampling, filtering)
+            if self.audio_transforms is not None:
+                audio_segment = self.audio_transforms(audio_segment)
+
+            return input_frame, output_frame, audio_segment
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
             return None, None
