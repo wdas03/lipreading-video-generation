@@ -26,6 +26,8 @@ CACHE_DIR = "/home/whd2108/hf-model-checkpoints"
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'cpu'
 
+buffer_frames = 5
+
 def high_pass_filter(waveform, sr, cutoff_freq=300):
     waveform = torchaudio.functional.highpass_biquad(waveform, sr, cutoff_freq)
     return waveform
@@ -44,6 +46,25 @@ class FrameItem:
         self.video_path = video_path
         self.frame_start = frame_start
         self.frame_end = frame_end
+
+audio_processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", cache_dir="/proj/vondrick/aa4870/hf-model-checkpoints")
+
+def process_audio(audio_segment, target_length, target_sr):
+    # Resample the audio segment if the sample rate is different from the target sample rate
+    if audio_segment.size(0) != target_sr:
+        resampler = torchaudio.transforms.Resample(orig_freq=audio_segment.size(0), new_freq=target_sr)
+        audio_segment = resampler(audio_segment)
+    
+    # Pad or truncate the audio segment to the target length
+    if audio_segment.size(1) < target_length:
+        # Pad the audio segment if it's shorter than the target length
+        padding = torch.zeros(audio_segment.size(0), target_length - audio_segment.size(1))
+        audio_segment = torch.cat([audio_segment, padding], dim=1)
+    elif audio_segment.size(1) > target_length:
+        # Truncate the audio segment if it's longer than the target length
+        audio_segment = audio_segment[:, :target_length]
+    
+    return audio_segment
 
 class TalkingFaceFrameDataset(Dataset):
     def __init__(self, frame_items, frame_transforms=None, frame_rate=30, audio_transforms=None):
@@ -90,9 +111,7 @@ class TalkingFaceFrameDataset(Dataset):
                 input_frame = self.frame_transforms(input_frame)
                 output_frame = self.frame_transforms(output_frame)
             
-            buffer_frames = 5
-
-            # Calculate exact second intervals for audio corresponding to these frames
+            # # Calculate exact second intervals for audio corresponding to these frames
             frame_duration = 1 / video_fps
             start_sec = max(0, (output_frame_idx - buffer_frames) * frame_duration)
             end_sec = output_frame_idx * frame_duration
@@ -104,11 +123,18 @@ class TalkingFaceFrameDataset(Dataset):
             audio_segment = waveform[:, start_sample:end_sample]
             audio_segment = normalize_waveform(high_pass_filter(audio_segment, sr))
 
+            target_length = 4000  # Set the target length (e.g., 16000 samples for 1 second of audio)
+            target_sr = 16000  # Set the target sample rate
+            audio_segment = process_audio(audio_segment, target_length, target_sr)
+
+            # Process audio using Wav2Vec2Processor
+            audio_segment_processed = audio_processor(audio_segment.squeeze(0), return_tensors="pt", sampling_rate=target_sr)
+
             # Apply audio transforms if provided (e.g., resampling, filtering)
             if self.audio_transforms is not None:
                 audio_segment = self.audio_transforms(audio_segment)
 
-            return input_frame, output_frame, audio_segment
+            return input_frame, output_frame, audio_segment_processed
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
             return None, None

@@ -44,7 +44,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Define configurations directly in the script for simplicity
 config = {
     'diffusion_params': {
-        'num_timesteps': 1000,
+        'num_timesteps': 500,
         'beta_start': 0.0001,
         'beta_end': 0.02
     },
@@ -52,7 +52,7 @@ config = {
         'ldm_batch_size': 4,
         'ldm_epochs': 10,
         'ldm_lr': 1e-4,
-        'ldm_ckpt_name': 'ldm_model_checkpoint.pth'
+        'ldm_ckpt_name': '/proj/vondrick/aa4870/ldm_model_checkpoint.pth'
     },
     'dataset_params': {
         'im_path': '/path/to/data',
@@ -103,7 +103,7 @@ def train():
     val_dataset = TalkingFaceFrameDataset(val_frames[:500], frame_transforms=frame_transforms)
     
     print("Initializing dataloaders...")
-    train_dataloader = DataLoader(train_dataset, batch_size=8, num_workers=4, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=64, num_workers=4, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=8, num_workers=4, shuffle=False)
 
     print("Creating model...")
@@ -116,12 +116,12 @@ def train():
         num_res_blocks=config['ldm_params']['num_res_blocks'],
         attention_resolutions=config['ldm_params']['attention_resolutions'],
         audio_feature_dim=768,  # Example dimensions
-        projected_audio_dim=256).to(device)
+        projected_audio_dim=128).to(device)
     model = nn.DataParallel(model)
     model.train()
 
     # Audio processing setup
-    audio_processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", cache_dir="/proj/vondrick/aa4870/hf-model-checkpoints")
+    # audio_processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", cache_dir="/proj/vondrick/aa4870/hf-model-checkpoints")
 
     # Optimizer and loss function
     optimizer = Adam(model.parameters(), lr=config['train_params']['ldm_lr'])
@@ -140,20 +140,20 @@ def train():
             input_frame, output_frame = input_frame.to(device), output_frame.to(device)
 
             # Process audio using Wav2Vec2Processor
-            audio_segment = audio_processor(audio_segment, return_tensors="pt", sampling_rate=16000)
-            audio_segment = audio_segment.to(device)
+            # audio_segment = audio_processor(audio_segment.squeeze(0).squeeze(0).squeeze(0), return_tensors="pt", padding="longest", sampling_rate=16000)
+            audio_segment = {k: v.squeeze(1).to(device) for k, v in audio_segment.items()}
 
             # Sample noise
-            noise_to_add = torch.randn_like(input_frame)
+            noise_to_add = torch.randn_like(output_frame)
 
             # Sample random timestep
-            t = torch.randint(0, config['diffusion_params']['num_timesteps'], (input_frame.shape[0],)).to(device)
+            t = torch.randint(0, config['diffusion_params']['num_timesteps'], (output_frame.shape[0],)).to(device)
 
             # Add noise to frames according to timestep
-            noisy_frame = scheduler.add_noise(input_frame, noise_to_add, t)
+            noisy_frame = scheduler.add_noise(output_frame, noise_to_add, t)
 
             # Forward pass
-            noise_pred = model(noisy_frame, audio_segment, t)
+            noise_pred = model(noisy_frame, input_frame, audio_segment, t)
             loss = criterion(noise_pred, noise_to_add)
             loss.backward()
             optimizer.step()
