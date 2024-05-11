@@ -1,5 +1,7 @@
 # Talking Face Repo
-[![Demo Video](./results/thumbnail.png)](./results/result_voice.mp4)
+[<img src="./results/thumbnail.png" width="300" alt="Demo Video">](./results/result_voice.mp4)
+
+
 
 ## Prerequisites
 
@@ -27,6 +29,6 @@ python preprocess.py --data_root data_root/main --preprocessed_root lrs2_preproc
 ```python
 python train_lipreading.py --data_root lrs2_preprocessed/ --checkpoint_dir $folder_to_save_checkpoints --syncnet_checkpoint_path $syncnet_weights --avhubert_root $root_to_avhubert_model --avhubert_path $path_to_avhubert_weights
 ```
-
-This repo combines code from a few different repos. It uses code from Wav2Lip for preprocessing LRS2, SyncNet, inference, and part of the training, it uses the AV-HuBERT repo from Meta for lipreading (along with util functions from TalkLip that act as a wrapper around AV-HuBERT), and it uses the S3FD face detection model
+## Acknowledgements
+This repository combines code from a few different repositories. It uses code from Wav2Lip for preprocessing LRS2, SyncNet, inference, and part of the training, it uses the AV-HuBERT repo from Meta for lipreading (along with util functions from TalkLip that act as a wrapper around AV-HuBERT), and it uses the S3FD face detection model
 
