@@ -32,8 +32,11 @@ python train_lipreading.py --data_root lrs2_preprocessed/ --checkpoint_dir $fold
 
 ### Weights
 [Checkpoint Step 9000](https://drive.google.com/file/d/1FohGonbtcrCaE1oGo_EVcolxRGxUdS79/view?usp=sharing)
+
 [Face detection](https://drive.google.com/file/d/1_DuKk_q3YsmwitfYic6akMRXR857X8ZL/view?usp=sharing)
+
 [SyncNet](https://iiitaphyd-my.sharepoint.com/personal/radrabha_m_research_iiit_ac_in/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fradrabha%5Fm%5Fresearch%5Fiiit%5Fac%5Fin%2FDocuments%2FWav2Lip%5FModels%2Flipsync%5Fexpert%2Epth&parent=%2Fpersonal%2Fradrabha%5Fm%5Fresearch%5Fiiit%5Fac%5Fin%2FDocuments%2FWav2Lip%5FModels&ga=1)
+
 [Lip reading](https://drive.google.com/file/d/1XAVhWXjd77UHsfna9O8cASHr3iGiQBQU/view)
 ## Acknowledgements
 This repository combines code from a few different repositories. It uses code from Wav2Lip for preprocessing LRS2, SyncNet, inference, and part of the training, it uses the AV-HuBERT repo from Meta for lipreading (along with util functions from TalkLip that act as a wrapper around AV-HuBERT), and it uses the S3FD face detection model
